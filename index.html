@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>PetMark Turni Cloud</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#e30613" />
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Supabase JS SDK v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      background: #f4f5fb;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+      color: #1e293b;
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 1200px;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .logo-strip {
+      background: #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .logo-strip img {
+      max-width: 260px;
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+      display: block;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      background: linear-gradient(90deg, #ffffff 0%, #ffe5e7 40%, #e30613 100%);
+      color: #1e293b;
+      position: relative;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      background: rgba(37,99,235,0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+
+    .brand-text h1 {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .brand-text span {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .month-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .month-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      border: none;
+      background: rgba(148,163,184,0.4);
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .month-label {
+      font-size: 16px;
+      font-weight: 600;
+      white-space: nowrap;
+      color: #1e293b;
+    }
+
+    .right-header {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    .monthly-hours {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.25);
+      font-size: 12px;
+      text-align: right;
+      white-space: nowrap;
+      color: #ffffff;
+    }
+
+    .monthly-hours span {
+      display: block;
+      color: #ffffff;
+    }
+
+    .monthly-hours .label {
+      opacity: 0.9;
+      font-weight: 500;
+    }
+
+    .monthly-hours .value {
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .monthly-hours .extra {
+      font-size: 11px;
+      opacity: 0.95;
+    }
+
+    .user-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0,0,0,0.28);
+      padding: 4px 9px;
+      border-radius: 999px;
+      backdrop-filter: blur(4px);
+      color: #ffffff;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.05s;
+    }
+
+    .user-card:hover {
+      background: rgba(0,0,0,0.40);
+      transform: translateY(-1px);
+    }
+
+    .user-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      object-fit: cover;
+      border: 2px solid rgba(255,255,255,0.9);
+      box-shadow: 0 0 0 1px rgba(15,23,42,0.4);
+    }
+
+    .user-info {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+    }
+
+    .user-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      opacity: 0.9;
+      color: #e5e7eb;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .user-hint {
+      font-size: 10px;
+      opacity: 0.8;
+      margin-top: 2px;
+      color: #e5e7eb;
+    }
+
+    /* Barra login / stato utente (sopra contratto) */
+    .login-bar {
+      background: #f9fafb;
+      padding: 8px 20px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    .login-status span {
+      display: block;
+    }
+
+    .login-status .who {
+      font-weight: 600;
+    }
+
+    .login-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .login-actions input {
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      padding: 4px 8px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .login-actions input:focus {
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 1px rgba(79,70,229,0.3);
+    }
+
+    .login-actions button {
+      border-radius: 999px;
+      border: none;
+      padding: 5px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      background: #e2e8f0;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    .login-actions button.primary {
+      background: linear-gradient(135deg, #4f46e5, #ec4899);
+      color: white;
+    }
+
+    .login-error {
+      font-size: 12px;
+      color: #b91c1c;
+      margin-top: 2px;
+    }
+
+    .contract-bar {
+      background: #ffffff;
+      padding: 10px 20px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 14px;
+    }
+
+    .contract-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .contract-label {
+      font-weight: 600;
+      color: #111827;
+    }
+
+    #contractHoursSelect {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      font-size: 14px;
+      background: #f9fafb;
+      color: #111827;
+      outline: none;
+    }
+
+    .contract-note {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .toolbar {
+      padding: 10px 20px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      gap: 8px;
+      background: #f8fafc;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      background: #e2e8f0;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, #4f46e5, #ec4899);
+      color: #fff;
+    }
+
+    .btn.danger {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+
+    main {
+      padding: 14px 20px 20px;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .calendar-wrapper {
+      overflow-x: auto;
+      overflow-y: hidden;
+      width: 100%;
+    }
+
+    table.calendar {
+      width: 100%;
+      min-width: 640px;
+      border-collapse: collapse;
+      table-layout: fixed;
+      background: #f9fafb;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .calendar th,
+    .calendar td {
+      border: 1px solid #e2e8f0;
+    }
+
+    .calendar th {
+      padding: 8px 6px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #6b7280;
+      background: #f8fafc;
+    }
+
+    .calendar th.week-total-header {
+      background: #f1f5f9;
+      font-size: 11px;
+    }
+
+    .calendar td.day-cell {
+      height: 90px;
+      vertical-align: top;
+      background: #ffffff;
+      cursor: pointer;
+      position: relative;
+      transition: background 0.15s, box-shadow 0.15s, transform 0.05s, border-color 0.15s;
+      border-radius: 6px;
+    }
+
+    .calendar td.day-cell:hover {
+      background: #eef2ff;
+      box-shadow: inset 0 0 0 1px #6366f1;
+      transform: translateY(-1px);
+    }
+
+    .calendar td.empty {
+      background: #f8fafc;
+    }
+
+    .calendar td.week-total-cell {
+      width: 80px;
+      background: #f9fafb;
+      font-size: 11px;
+      text-align: center;
+      color: #4b5563;
+      font-weight: 500;
+    }
+
+    .calendar td.week-total-cell .week-label {
+      display: block;
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .calendar td.week-total-cell .week-hours {
+      display: block;
+      margin-top: 2px;
+    }
+
+    .day-inner {
+      padding: 4px 5px 4px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: #6b7280;
+    }
+
+    .day-number {
+      font-weight: 600;
+      color: #111827;
+      font-size: 12px;
+      padding: 0;
+      border-radius: 999px;
+    }
+
+    .today-indicator {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(129,140,248,0.15);
+      color: #4f46e5;
+    }
+
+    .day-cell.today {
+      background: #e0e7ff;
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 1px rgba(79,70,229,0.5);
+    }
+
+    .day-cell.today .day-number {
+      background: linear-gradient(135deg, #4f46e5, #6366f1);
+      color: #fff;
+      padding: 2px 7px;
+      font-size: 12px;
+    }
+
+    .day-cell.today .today-indicator {
+      background: transparent;
+      color: #4f46e5;
+      font-weight: 600;
+    }
+
+    .shift-summary {
+      margin-top: auto;
+      font-size: 10px;
+      line-height: 1.25;
+      color: #1f2937;
+      background: #eef2ff;
+      border-radius: 9px;
+      padding: 3px 5px;
+      display: inline-flex;
+      flex-direction: column;
+      gap: 1px;
+      max-width: 100%;
+      word-break: break-word;
+      border: 1px solid rgba(99,102,241,0.25);
+    }
+
+    .shift-summary .total {
+      font-weight: 700;
+      font-size: 10px;
+      color: #111827;
+    }
+
+    .shift-summary .times {
+      font-size: 9px;
+      color: #374151;
+      opacity: 0.9;
+    }
+
+    .shift-summary .colleague {
+      font-size: 9px;
+      color: #6b7280;
+    }
+
+    .day-cell.has-shift {
+      background: #f5f3ff;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      padding: 12px;
+    }
+
+    .modal-backdrop.show {
+      display: flex;
+    }
+
+    .modal {
+      width: 100%;
+      max-width: 420px;
+      background: #f9fafb;
+      border-radius: 18px;
+      box-shadow: 0 18px 40px rgba(15,23,42,0.5);
+      padding: 18px 18px 16px;
+      position: relative;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #111827;
+    }
+
+    .modal-close {
+      border: none;
+      background: transparent;
+      font-size: 20px;
+      cursor: pointer;
+      color: #6b7280;
+    }
+
+    .modal-section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #9ca3af;
+      margin-top: 4px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .modal-section-label .icon {
+      font-size: 14px;
+    }
+
+    .modal input[type="text"],
+    .modal input[type="time"] {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+      font-size: 14px;
+      outline: none;
+      background: #ffffff;
+    }
+
+    .modal input[type="text"]:focus,
+    .modal input[type="time"]:focus {
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 1px rgba(79,70,229,0.3);
+    }
+
+    .shifts-list {
+      margin-top: 4px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .shift-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .shift-row input[type="time"] {
+      flex: 1;
+    }
+
+    .remove-shift {
+      border: none;
+      background: #fee2e2;
+      color: #b91c1c;
+      border-radius: 999px;
+      font-size: 16px;
+      width: 26px;
+      height: 26px;
+      cursor: pointer;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-add-shift {
+      margin-top: 4px;
+      width: 100%;
+      border-radius: 12px;
+      border: 1px dashed #c4b5fd;
+      background: #f5f3ff;
+      padding: 6px 0;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      color: #4f46e5;
+    }
+
+    .modal-footer {
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-outline {
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      background: #fff;
+      font-size: 13px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+
+    .btn-gradient {
+      border-radius: 999px;
+      border: none;
+      background: linear-gradient(135deg, #4f46e5, #ec4899);
+      color: #fff;
+      font-size: 13px;
+      padding: 6px 14px;
+      cursor: pointer;
+    }
+
+    .modal-note {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 10px;
+      }
+
+      .app-container {
+        border-radius: 12px;
+      }
+
+      .logo-strip img {
+        height: auto;
+      }
+
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 12px 12px 14px;
+      }
+
+      .brand-text h1 {
+        font-size: 18px;
+      }
+
+      .month-controls {
+        position: static;
+        transform: none;
+        order: 3;
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .month-label {
+        font-size: 15px;
+      }
+
+      .right-header {
+        width: 100%;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .monthly-hours {
+        margin-left: 0;
+        font-size: 12px;
+        padding: 5px 9px;
+      }
+
+      .monthly-hours .value {
+        font-size: 13px;
+      }
+
+      .user-card {
+        padding: 3px 7px;
+        gap: 6px;
+      }
+
+      .user-avatar {
+        width: 32px;
+        height: 32px;
+      }
+
+      .user-name {
+        font-size: 12px;
+      }
+
+      .login-bar {
+        padding: 8px 12px;
+      }
+
+      .contract-bar {
+        padding: 8px 12px;
+      }
+
+      .toolbar {
+        padding: 8px 12px;
+      }
+
+      .btn {
+        flex: 1 1 45%;
+        justify-content: center;
+      }
+
+      main {
+        padding: 10px 12px 14px;
+      }
+
+      .calendar td.day-cell {
+        height: 82px;
+      }
+
+      .modal {
+        max-width: none;
+        width: 100%;
+        border-radius: 14px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .btn {
+        flex: 1 1 100%;
+      }
+
+      table.calendar {
+        min-width: 560px;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="app-container">
+
+  <div class="logo-strip">
+    <!-- qui puoi usare il logo locale del nuovo repo se vuoi -->
+    <img src="logo-petmark.png" alt="PetMark">
+  </div>
+
+  <header>
+    <div class="brand">
+      <div class="brand-icon">📅</div>
+      <div class="brand-text">
+        <h1>Busto Arsizio 321</h1>
+        <span>Gestione Turni di Lavoro (Cloud)</span>
+      </div>
+    </div>
+
+    <div class="month-controls">
+      <button class="month-btn" id="prevMonthBtn">&#x2039;</button>
+      <div class="month-label" id="monthLabel">Novembre 2025</div>
+      <button class="month-btn" id="nextMonthBtn">&#x203A;</button>
+    </div>
+
+    <div class="right-header">
+      <div class="monthly-hours">
+        <span class="label">Ore Mensili</span>
+        <span class="value" id="monthlyHours">0.0 h</span>
+        <span class="extra" id="monthlyExtra">Extra: 0.0 h</span>
+      </div>
+      <div class="user-card" id="userCard">
+        <img src="avatar-default.jpg" alt="Utente" class="user-avatar" id="userAvatar">
+        <div class="user-info">
+          <span class="user-label" id="userNameLabel">Utente</span>
+          <span class="user-name" id="userRoleLabel">Non connesso</span>
+          <span class="user-hint">Accedi per sincronizzare i turni</span>
+        </div>
+      </div>
+      <input type="file" id="avatarFileInput" accept="image/*" style="display:none" />
+    </div>
+  </header>
+
+  <!-- Barra login / stato -->
+  <div class="login-bar">
+    <div class="login-status">
+      <span>Stato: <span class="who" id="loginStatus">Non autenticato</span></span>
+      <span id="loginInfo" style="font-size:12px; color:#6b7280;">Accedi come admin o dipendente.</span>
+      <div class="login-error" id="loginError"></div>
+    </div>
+    <div class="login-actions" id="loginForm">
+      <input type="email" id="loginEmail" placeholder="Email" />
+      <input type="password" id="loginPassword" placeholder="Password" />
+      <button class="primary" id="loginButton" type="button">Login</button>
+      <button id="logoutButton" type="button" style="display:none;">Logout</button>
+    </div>
+  </div>
+
+  <div class="contract-bar">
+    <div class="contract-left">
+      <span class="contract-label">Ore settimanali da contratto:</span>
+      <select id="contractHoursSelect">
+        <option value="">–</option>
+        <option value="20">20 h/sett</option>
+        <option value="30">30 h/sett</option>
+        <option value="40">40 h/sett</option>
+      </select>
+    </div>
+    <div class="contract-note">
+      Sincronizzato con il profilo dipendente (cloud).
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn" id="refreshBtn">🔄 Ricarica dal cloud</button>
+    <button class="btn primary" id="saveMonthBtn">💾 Salva mese nel cloud</button>
+    <button class="btn danger" id="clearBtn">🗑️ Cancella tutto il mese (admin)</button>
+  </div>
+
+  <main>
+    <div class="calendar-wrapper">
+      <table class="calendar">
+        <thead>
+        <tr>
+          <th>Lun</th>
+          <th>Mar</th>
+          <th>Mer</th>
+          <th>Gio</th>
+          <th>Ven</th>
+          <th>Sab</th>
+          <th>Dom</th>
+          <th class="week-total-header">Settimana</th>
+        </tr>
+        </thead>
+        <tbody id="calendarBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- MODALE TURNI -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">2 Novembre</div>
+      <button class="modal-close" id="modalCloseBtn">&times;</button>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-label"><span class="icon">👤</span> Collega</div>
+      <input type="text" id="colleagueInput" placeholder="Nome collega (opzionale)" />
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-label"><span class="icon">⏱️</span> Turni</div>
+      <div class="shifts-list" id="shiftsList"></div>
+      <button class="btn-add-shift" id="addShiftBtn" type="button">＋ Aggiungi turno</button>
+      <div class="modal-note">
+        I minuti sono arrotondati ai quarti d'ora (00, 15, 30, 45).
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-outline" id="cancelModalBtn" type="button">Annulla</button>
+      <button class="btn-gradient" id="saveModalBtn" type="button">Salva</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // === Supabase init ===
+  const SUPABASE_URL = "https://vuwvghwenhhuwrhrkmnr.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1d3ZnaHdlbmhodXdyaHJrbW5yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNjA1MTcsImV4cCI6MjA3OTgzNjUxN30.JuZ8uwPvPn0bDIVliczze6uoWyzD7k7wZVo3-63J6wY"; // chiave anon
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const monthNames = [
+    "Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
+    "Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"
+  ];
+
+  let currentDate = new Date();
+  let currentYear = currentDate.getFullYear();
+  let currentMonth = currentDate.getMonth();
+
+  let editingDate = null;
+  let dayWeekMap = {};
+  let currentMonthlyTotal = 0;
+  let currentWeeksInMonth = 4;
+
+  // In memoria: shifts caricati dal cloud (per utente loggato)
+  // { "YYYY-MM-DD": { colleague, shifts:[{start,end}] } }
+  let shifts = {};
+  let currentUser = null; // { id, email, role, full_name, weekly_hours }
+
+  // === Utility ===
+  function pad(n) { return n < 10 ? "0" + n : "" + n; }
+  function dateKey(year, month, day) { return year + "-" + pad(month+1) + "-" + pad(day); }
+  function parseDateKey(key) { const [y,m,d] = key.split("-").map(Number); return {year:y, month:m-1, day:d}; }
+  function isToday(y,m,d) {
+    const t = new Date();
+    return t.getFullYear() === y && t.getMonth() === m && t.getDate() === d;
+  }
+
+  function calcHoursForShifts(list) {
+    if (!list) return 0;
+    let total = 0;
+    for (const s of list) {
+      if (!s.start || !s.end) continue;
+      const [sh,sm] = s.start.split(":").map(Number);
+      const [eh,em] = s.end.split(":").map(Number);
+      if (Number.isNaN(sh) || Number.isNaN(eh)) continue;
+      let start = sh*60+sm;
+      let end = eh*60+em;
+      if (end < start) end += 24*60;
+      if (end === start) continue;
+      total += (end-start)/60;
+    }
+    return total;
+  }
+
+  function buildCalendar(year, month) {
+    const tbody = document.getElementById("calendarBody");
+    tbody.innerHTML = "";
+    dayWeekMap = {};
+
+    document.getElementById("monthLabel").textContent =
+      monthNames[month] + " " + year;
+
+    const first = new Date(year, month, 1);
+    const last = new Date(year, month+1, 0);
+    const daysInMonth = last.getDate();
+
+    let startWeekday = (first.getDay() + 6) % 7; // 0 lun
+
+    let weekIndex = 0;
+    let row = document.createElement("tr");
+    let cellsFilled = 0;
+
+    for (let i=0;i<startWeekday;i++) {
+      const td = document.createElement("td");
+      td.className = "empty";
+      row.appendChild(td);
+      cellsFilled++;
+    }
+
+    for (let day=1; day<=daysInMonth; day++) {
+      if (cellsFilled === 7) {
+        row.appendChild(createWeekTotalCell(weekIndex));
+        tbody.appendChild(row);
+        row = document.createElement("tr");
+        cellsFilled = 0;
+        weekIndex++;
+      }
+
+      const key = dateKey(year, month, day);
+      const td = document.createElement("td");
+      td.className = "day-cell";
+      td.dataset.date = key;
+
+      const inner = document.createElement("div");
+      inner.className = "day-inner";
+
+      const header = document.createElement("div");
+      header.className = "day-header";
+
+      const num = document.createElement("div");
+      num.className = "day-number";
+      num.textContent = day;
+      header.appendChild(num);
+
+      if (isToday(year, month, day)) {
+        td.classList.add("today");
+        const tBadge = document.createElement("div");
+        tBadge.className = "today-indicator";
+        tBadge.textContent = "Oggi";
+        header.appendChild(tBadge);
+      }
+
+      const summary = document.createElement("div");
+      summary.className = "shift-summary";
+      summary.style.display = "none";
+
+      inner.appendChild(header);
+      inner.appendChild(summary);
+      td.appendChild(inner);
+
+      // click solo se admin (lo attiviamo dopo)
+      td.addEventListener("click", () => {
+        if (!currentUser || currentUser.role !== "admin") return;
+        openModal(key);
+      });
+
+      row.appendChild(td);
+      dayWeekMap[key] = weekIndex;
+      cellsFilled++;
+    }
+
+    while (cellsFilled < 7) {
+      const td = document.createElement("td");
+      td.className = "empty";
+      row.appendChild(td);
+      cellsFilled++;
+    }
+
+    row.appendChild(createWeekTotalCell(weekIndex));
+    tbody.appendChild(row);
+    currentWeeksInMonth = weekIndex+1;
+
+    recomputeTotals(year, month);
+  }
+
+  function createWeekTotalCell(index) {
+    const td = document.createElement("td");
+    td.className = "week-total-cell";
+    td.dataset.weekIndex = index;
+
+    const label = document.createElement("span");
+    label.className = "week-label";
+    label.textContent = "Sett. " + (index+1);
+
+    const hours = document.createElement("span");
+    hours.className = "week-hours";
+    hours.textContent = "0.0 h";
+
+    td.appendChild(label);
+    td.appendChild(hours);
+    return td;
+  }
+
+  function recomputeTotals(year, month) {
+    document.querySelectorAll(".day-cell").forEach(td => {
+      td.classList.remove("has-shift");
+      const s = td.querySelector(".shift-summary");
+      if (s) { s.innerHTML = ""; s.style.display = "none"; }
+    });
+
+    const weekCells = Array.from(document.querySelectorAll(".week-total-cell"));
+    const weekTotals = weekCells.map(() => 0);
+
+    for (const key of Object.keys(shifts)) {
+      const {year:y, month:m} = parseDateKey(key);
+      if (y !== year || m !== month) continue;
+      const dayData = shifts[key];
+      const h = calcHoursForShifts(dayData.shifts);
+      if (h <= 0) continue;
+      const w = dayWeekMap[key];
+      if (w == null) continue;
+      weekTotals[w] += h;
+
+      const td = document.querySelector(`.day-cell[data-date="${key}"]`);
+      if (!td) continue;
+      td.classList.add("has-shift");
+      const summary = td.querySelector(".shift-summary");
+      summary.style.display = "inline-flex";
+      summary.innerHTML = "";
+
+      const totalSpan = document.createElement("span");
+      totalSpan.className = "total";
+      totalSpan.textContent = h.toFixed(1) + " h";
+      summary.appendChild(totalSpan);
+
+      const timesSpan = document.createElement("span");
+      timesSpan.className = "times";
+      timesSpan.textContent = dayData.shifts.map(s => `${s.start}-${s.end}`).join(" · ");
+      summary.appendChild(timesSpan);
+
+      if (dayData.colleague) {
+        const cSpan = document.createElement("span");
+        cSpan.className = "colleague";
+        cSpan.textContent = dayData.colleague;
+        summary.appendChild(cSpan);
+      }
+    }
+
+    let mTotal = 0;
+    weekTotals.forEach((val, i) => {
+      mTotal += val;
+      const cell = weekCells[i];
+      if (!cell) return;
+      cell.querySelector(".week-hours").textContent = val.toFixed(1) + " h";
+    });
+
+    currentMonthlyTotal = mTotal;
+    document.getElementById("monthlyHours").textContent = mTotal.toFixed(1) + " h";
+    updateExtraHours();
+  }
+
+  // === Modale ===
+  const modalBackdrop = document.getElementById("modalBackdrop");
+  const modalTitle = document.getElementById("modalTitle");
+  const colleagueInput = document.getElementById("colleagueInput");
+  const shiftsList = document.getElementById("shiftsList");
+
+  function openModal(dateKeyStr) {
+    editingDate = dateKeyStr;
+    const {month, day} = parseDateKey(dateKeyStr);
+    modalTitle.textContent = day + " " + monthNames[month];
+
+    const existing = shifts[dateKeyStr];
+    colleagueInput.value = existing?.colleague || "";
+    shiftsList.innerHTML = "";
+
+    const list = existing?.shifts || [];
+    if (list.length) {
+      list.forEach(s => addShiftRow(s.start, s.end));
+    } else {
+      addShiftRow("", "");
+    }
+
+    modalBackdrop.classList.add("show");
+  }
+
+  function closeModal() {
+    modalBackdrop.classList.remove("show");
+    editingDate = null;
+  }
+
+  function fixToQuarter(input) {
+    if (!input.value) return;
+    let [h,m] = input.value.split(":");
+    h = parseInt(h,10); m = parseInt(m||"0",10);
+    if (Number.isNaN(h) || Number.isNaN(m)) return;
+    let q = Math.round(m/15)*15;
+    if (q === 60) q = 45;
+    input.value = pad(h) + ":" + pad(q);
+  }
+
+  function addShiftRow(start="", end="") {
+    const row = document.createElement("div");
+    row.className = "shift-row";
+
+    const s = document.createElement("input");
+    s.type = "time";
+    s.value = start;
+    s.step = 900;
+    s.addEventListener("change", () => fixToQuarter(s));
+    s.addEventListener("blur", () => fixToQuarter(s));
+
+    const e = document.createElement("input");
+    e.type = "time";
+    e.value = end;
+    e.step = 900;
+    e.addEventListener("change", () => fixToQuarter(e));
+    e.addEventListener("blur", () => fixToQuarter(e));
+
+    const rm = document.createElement("button");
+    rm.className = "remove-shift";
+    rm.textContent = "×";
+    rm.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      row.remove();
+    });
+
+    row.appendChild(s);
+    row.appendChild(e);
+    row.appendChild(rm);
+    shiftsList.appendChild(row);
+  }
+
+  function saveModal() {
+    if (!editingDate) return;
+    const coll = colleagueInput.value.trim();
+    const rows = shiftsList.querySelectorAll(".shift-row");
+    const newShifts = [];
+    rows.forEach(row => {
+      const s = row.querySelector("input[type=time]:nth-child(1)");
+      const e = row.querySelector("input[type=time]:nth-child(2)");
+      fixToQuarter(s);
+      fixToQuarter(e);
+      if (s.value && e.value) newShifts.push({ start: s.value, end: e.value });
+    });
+
+    if (newShifts.length === 0) {
+      delete shifts[editingDate];
+    } else {
+      shifts[editingDate] = { colleague: coll, shifts: newShifts };
+    }
+    recomputeTotals(currentYear, currentMonth);
+    closeModal();
+  }
+
+  // === Contract / Extra ===
+  function updateExtraHours() {
+    const select = document.getElementById("contractHoursSelect");
+    const extraSpan = document.getElementById("monthlyExtra");
+    const weekly = currentUser?.weekly_hours || parseFloat(select.value || "0");
+    let extra = 0;
+    if (weekly > 0) {
+      const monthlyContract = weekly * currentWeeksInMonth;
+      extra = currentMonthlyTotal - monthlyContract;
+      if (extra < 0) extra = 0;
+    }
+    extraSpan.textContent = "Extra: " + extra.toFixed(1) + " h";
+  }
+
+  // === Login UI ===
+  const loginStatusEl = document.getElementById("loginStatus");
+  const loginInfoEl = document.getElementById("loginInfo");
+  const loginErrorEl = document.getElementById("loginError");
+  const loginEmailEl = document.getElementById("loginEmail");
+  const loginPasswordEl = document.getElementById("loginPassword");
+  const loginButton = document.getElementById("loginButton");
+  const logoutButton = document.getElementById("logoutButton");
+  const userNameLabel = document.getElementById("userNameLabel");
+  const userRoleLabel = document.getElementById("userRoleLabel");
+
+  async function refreshSession() {
+    const { data } = await supabase.auth.getUser();
+    if (!data || !data.user) {
+      currentUser = null;
+      loginStatusEl.textContent = "Non autenticato";
+      loginInfoEl.textContent = "Accedi come admin o dipendente.";
+      loginErrorEl.textContent = "";
+      userRoleLabel.textContent = "Non connesso";
+      document.getElementById("saveMonthBtn").disabled = true;
+      document.getElementById("clearBtn").disabled = true;
+      return;
+    }
+
+    // TODO: query profilo e contratto da Supabase
+    // esempio (poi lo implementiamo sul serio quando hai creato le tabelle):
+    // const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+    // const { data: contract } = await supabase.from('contracts').select('*').eq('user_id', data.user.id).maybeSingle();
+
+    // Per ora mock:
+    currentUser = {
+      id: data.user.id,
+      email: data.user.email,
+      role: "admin",       // lo sistemeremo con la tabella profiles
+      full_name: "Demo",
+      weekly_hours: 30
+    };
+
+    loginStatusEl.textContent = currentUser.email || "Connesso";
+    loginInfoEl.textContent = "Ruolo: " + currentUser.role;
+    userNameLabel.textContent = currentUser.full_name || "Utente";
+    userRoleLabel.textContent = currentUser.role === "admin" ? "Admin" : "Dipendente";
+
+    loginErrorEl.textContent = "";
+    document.getElementById("saveMonthBtn").disabled = false;
+    document.getElementById("clearBtn").disabled = currentUser.role !== "admin";
+
+    // Carica contractHoursSelect dal weekly_hours (solo visuale)
+    const contractSelect = document.getElementById("contractHoursSelect");
+    if (currentUser.weekly_hours) {
+      contractSelect.value = String(currentUser.weekly_hours);
+    }
+    updateExtraHours();
+
+    // carica i turni dal cloud per questo utente + mese corrente (stub, lo faremo dopo)
+    // await loadShiftsFromCloud();
+  }
+
+  loginButton.addEventListener("click", async () => {
+    loginErrorEl.textContent = "";
+    const email = loginEmailEl.value.trim();
+    const password = loginPasswordEl.value.trim();
+    if (!email || !password) {
+      loginErrorEl.textContent = "Inserisci email e password.";
+      return;
+    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      loginErrorEl.textContent = "Login fallito: " + error.message;
+      return;
+    }
+    loginPasswordEl.value = "";
+    logoutButton.style.display = "inline-flex";
+    await refreshSession();
+  });
+
+  logoutButton.addEventListener("click", async () => {
+    await supabase.auth.signOut();
+    currentUser = null;
+    loginStatusEl.textContent = "Non autenticato";
+    loginInfoEl.textContent = "Accedi come admin o dipendente.";
+    userNameLabel.textContent = "Utente";
+    userRoleLabel.textContent = "Non connesso";
+    logoutButton.style.display = "none";
+    document.getElementById("saveMonthBtn").disabled = true;
+    document.getElementById("clearBtn").disabled = true;
+    shifts = {};
+    buildCalendar(currentYear, currentMonth);
+  });
+
+  // === Avatar locale (non cloud per ora) ===
+  const AVATAR_KEY = "petmark_cloud_avatar_v1";
+  const userCard = document.getElementById("userCard");
+  const avatarInput = document.getElementById("avatarFileInput");
+  const avatarImg = document.getElementById("userAvatar");
+
+  function loadAvatar() {
+    try {
+      const saved = localStorage.getItem(AVATAR_KEY);
+      if (saved) avatarImg.src = saved;
+    } catch (e) {}
+  }
+
+  userCard.addEventListener("click", () => {
+    avatarInput.click();
+  });
+
+  avatarInput.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Seleziona un'immagine.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      avatarImg.src = dataUrl;
+      try { localStorage.setItem(AVATAR_KEY, dataUrl); } catch (e) {}
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // === Pulsanti toolbar (ancora logica stub) ===
+  document.getElementById("refreshBtn").addEventListener("click", async () => {
+    if (!currentUser) {
+      alert("Devi fare login per caricare i turni dal cloud.");
+      return;
+    }
+    // TODO: implementare loadShiftsFromCloud
+    alert("Qui chiameremo Supabase per ricaricare i turni del mese.");
+  });
+
+  document.getElementById("saveMonthBtn").addEventListener("click", async () => {
+    if (!currentUser) {
+      alert("Devi fare login per salvare nel cloud.");
+      return;
+    }
+    // TODO: implementare saveShiftsToCloud
+    alert("Qui salveremo i turni del mese su Supabase (solo admin).");
+  });
+
+  document.getElementById("clearBtn").addEventListener("click", async () => {
+    if (!currentUser || currentUser.role !== "admin") {
+      alert("Solo l'admin può cancellare i turni.");
+      return;
+    }
+    if (!confirm("Vuoi cancellare tutti i turni di questo mese dal cloud?")) return;
+    // TODO: implementare deleteShiftsFromCloud
+    alert("Qui cancelleremo i turni del mese su Supabase.");
+  });
+
+  // === Navigation month ===
+  document.getElementById("prevMonthBtn").addEventListener("click", () => {
+    currentMonth--;
+    if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+    buildCalendar(currentYear, currentMonth);
+  });
+
+  document.getElementById("nextMonthBtn").addEventListener("click", () => {
+    currentMonth++;
+    if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+    buildCalendar(currentYear, currentMonth);
+  });
+
+  document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
+  document.getElementById("cancelModalBtn").addEventListener("click", closeModal);
+  modalBackdrop.addEventListener("click", (e) => {
+    if (e.target === modalBackdrop) closeModal();
+  });
+  document.getElementById("addShiftBtn").addEventListener("click", () => addShiftRow());
+  document.getElementById("saveModalBtn").addEventListener("click", saveModal);
+
+  // === Init ===
+  (async function init() {
+    loadAvatar();
+    buildCalendar(currentYear, currentMonth);
+    await refreshSession();  // se l'utente era già loggato, lo ripristiniamo
+  })();
+</script>
+</body>
+</html>
