@@ -945,6 +945,140 @@
   let shifts = {};
   let currentUser = null; // { id, email, role, full_name, weekly_hours }
 
+  async function loadShiftsFromCloud() {
+  if (!currentUser) return;
+
+  shifts = {}; // svuoto locale per questo mese
+
+  const first = new Date(currentYear, currentMonth, 1);
+  const last = new Date(currentYear, currentMonth + 1, 0);
+  const from = first.toISOString().slice(0, 10);
+  const to = last.toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from("shifts")
+    .select("work_date, start_time, end_time, colleague")
+    .eq("user_id", currentUser.id)
+    .gte("work_date", from)
+    .lte("work_date", to)
+    .order("work_date", { ascending: true })
+    .order("start_time", { ascending: true });
+
+  if (error) {
+    console.error("Errore caricando turni:", error);
+    alert("Errore caricando i turni dal cloud.");
+    buildCalendar(currentYear, currentMonth);
+    return;
+  }
+
+  for (const row of data) {
+    const key = row.work_date; // formato 'YYYY-MM-DD'
+    if (!shifts[key]) {
+      shifts[key] = { colleague: row.colleague || "", shifts: [] };
+    }
+    shifts[key].shifts.push({
+      start: row.start_time.slice(0, 5),
+      end: row.end_time.slice(0, 5)
+    });
+  }
+
+  buildCalendar(currentYear, currentMonth);
+}
+
+async function saveShiftsToCloud() {
+  if (!currentUser || currentUser.role !== "admin") {
+    alert("Solo l'admin può salvare nel cloud.");
+    return;
+  }
+
+  const first = new Date(currentYear, currentMonth, 1);
+  const last = new Date(currentYear, currentMonth + 1, 0);
+  const from = first.toISOString().slice(0, 10);
+  const to = last.toISOString().slice(0, 10);
+
+  // 1) Cancella i turni esistenti nel mese
+  const { error: delErr } = await supabase
+    .from("shifts")
+    .delete()
+    .eq("user_id", currentUser.id)
+    .gte("work_date", from)
+    .lte("work_date", to);
+
+  if (delErr) {
+    console.error("Errore cancellando vecchi turni:", delErr);
+    alert("Errore cancellando i vecchi turni.");
+    return;
+  }
+
+  // 2) Inserisci i nuovi turni da 'shifts'
+  const rows = [];
+  for (const key of Object.keys(shifts)) {
+    const { year, month, day } = parseDateKey(key);
+    if (year !== currentYear || month !== currentMonth) continue;
+    const dayData = shifts[key];
+    for (const s of dayData.shifts) {
+      rows.push({
+        user_id: currentUser.id,
+        work_date: key,
+        start_time: s.start + ":00",
+        end_time: s.end + ":00",
+        colleague: dayData.colleague || null
+      });
+    }
+  }
+
+  if (rows.length === 0) {
+    alert("Nessun turno da salvare per questo mese.");
+    return;
+  }
+
+  const { error: insErr } = await supabase.from("shifts").insert(rows);
+  if (insErr) {
+    console.error("Errore inserendo turni:", insErr);
+    alert("Errore salvando i turni nel cloud.");
+    return;
+  }
+
+  alert("Turni del mese salvati correttamente nel cloud.");
+}
+
+async function deleteShiftsFromCloudForMonth() {
+  if (!currentUser || currentUser.role !== "admin") {
+    alert("Solo l'admin può cancellare i turni.");
+    return;
+  }
+
+  const first = new Date(currentYear, currentMonth, 1);
+  const last = new Date(currentYear, currentMonth + 1, 0);
+  const from = first.toISOString().slice(0, 10);
+  const to = last.toISOString().slice(0, 10);
+
+  const { error } = await supabase
+    .from("shifts")
+    .delete()
+    .eq("user_id", currentUser.id)
+    .gte("work_date", from)
+    .lte("work_date", to);
+
+  if (error) {
+    console.error("Errore cancellando turni:", error);
+    alert("Errore cancellando i turni dal cloud.");
+    return;
+  }
+
+  // Cancello anche lato frontend
+  for (const key of Object.keys(shifts)) {
+    const { year, month } = parseDateKey(key);
+    if (year === currentYear && month === currentMonth) {
+      delete shifts[key];
+    }
+  }
+  buildCalendar(currentYear, currentMonth);
+  alert("Turni del mese cancellati dal cloud.");
+}
+
+  
+
   // === Utility ===
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
   function dateKey(year, month, day) { return year + "-" + pad(month+1) + "-" + pad(day); }
@@ -1257,52 +1391,93 @@
   const userNameLabel = document.getElementById("userNameLabel");
   const userRoleLabel = document.getElementById("userRoleLabel");
 
-  async function refreshSession() {
-    const { data } = await supabase.auth.getUser();
-    if (!data || !data.user) {
-      currentUser = null;
-      loginStatusEl.textContent = "Non autenticato";
-      loginInfoEl.textContent = "Accedi come admin o dipendente.";
-      loginErrorEl.textContent = "";
-      userRoleLabel.textContent = "Non connesso";
-      document.getElementById("saveMonthBtn").disabled = true;
-      document.getElementById("clearBtn").disabled = true;
-      return;
-    }
-
-    // TODO: query profilo e contratto da Supabase
-    // esempio (poi lo implementiamo sul serio quando hai creato le tabelle):
-    // const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
-    // const { data: contract } = await supabase.from('contracts').select('*').eq('user_id', data.user.id).maybeSingle();
-
-    // Per ora mock:
-    currentUser = {
-      id: data.user.id,
-      email: data.user.email,
-      role: "admin",       // lo sistemeremo con la tabella profiles
-      full_name: "Demo",
-      weekly_hours: 30
-    };
-
-    loginStatusEl.textContent = currentUser.email || "Connesso";
-    loginInfoEl.textContent = "Ruolo: " + currentUser.role;
-    userNameLabel.textContent = currentUser.full_name || "Utente";
-    userRoleLabel.textContent = currentUser.role === "admin" ? "Admin" : "Dipendente";
-
-    loginErrorEl.textContent = "";
-    document.getElementById("saveMonthBtn").disabled = false;
-    document.getElementById("clearBtn").disabled = currentUser.role !== "admin";
-
-    // Carica contractHoursSelect dal weekly_hours (solo visuale)
-    const contractSelect = document.getElementById("contractHoursSelect");
-    if (currentUser.weekly_hours) {
-      contractSelect.value = String(currentUser.weekly_hours);
-    }
-    updateExtraHours();
-
-    // carica i turni dal cloud per questo utente + mese corrente (stub, lo faremo dopo)
-    // await loadShiftsFromCloud();
+async function refreshSession() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) {
+    console.error(error);
   }
+  if (!data || !data.user) {
+    currentUser = null;
+    loginStatusEl.textContent = "Non autenticato";
+    loginInfoEl.textContent = "Accedi come admin o dipendente.";
+    loginErrorEl.textContent = "";
+    userNameLabel.textContent = "Utente";
+    userRoleLabel.textContent = "Non connesso";
+    logoutButton.style.display = "none";
+    document.getElementById("saveMonthBtn").disabled = true;
+    document.getElementById("clearBtn").disabled = true;
+    shifts = {};
+    buildCalendar(currentYear, currentMonth);
+    return;
+  }
+
+  const user = data.user;
+
+  // Leggo il profilo da Supabase
+  const { data: profile, error: pError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (pError) {
+    console.error("Errore caricando profilo:", pError);
+    loginErrorEl.textContent = "Errore profilo: " + pError.message;
+  }
+
+  // Se il profilo non esiste ancora, ne creo uno di default employee
+  let role = "employee";
+  let full_name = user.email;
+  let weekly_hours = null;
+
+  if (!profile) {
+    const { error: insertErr } = await supabase.from("profiles").insert({
+      id: user.id,
+      full_name: user.email,
+      role: "employee",
+      store: "Busto Arsizio 321",
+      weekly_hours: null
+    });
+    if (insertErr) {
+      console.error("Errore creando profilo:", insertErr);
+    }
+  } else {
+    role = profile.role || "employee";
+    full_name = profile.full_name || user.email;
+    weekly_hours = profile.weekly_hours;
+  }
+
+  currentUser = {
+    id: user.id,
+    email: user.email,
+    role,
+    full_name,
+    weekly_hours
+  };
+
+  loginStatusEl.textContent = currentUser.email || "Connesso";
+  loginInfoEl.textContent = "Ruolo: " + currentUser.role;
+  userNameLabel.textContent = currentUser.full_name || "Utente";
+  userRoleLabel.textContent =
+    currentUser.role === "admin" ? "Admin" : "Dipendente";
+  loginErrorEl.textContent = "";
+
+  logoutButton.style.display = "inline-flex";
+
+  // Abilita / disabilita bottoni in base al ruolo
+  document.getElementById("saveMonthBtn").disabled = currentUser.role !== "admin";
+  document.getElementById("clearBtn").disabled = currentUser.role !== "admin";
+
+  // Imposta ore settimanali visuali se presenti
+  const contractSelect = document.getElementById("contractHoursSelect");
+  if (weekly_hours) {
+    contractSelect.value = String(weekly_hours);
+  }
+
+  // Carica turni dal cloud per questo utente e mese
+  await loadShiftsFromCloud();
+}
+
 
   loginButton.addEventListener("click", async () => {
     loginErrorEl.textContent = "";
@@ -1369,46 +1544,43 @@
     reader.readAsDataURL(file);
   });
 
-  // === Pulsanti toolbar (ancora logica stub) ===
   document.getElementById("refreshBtn").addEventListener("click", async () => {
-    if (!currentUser) {
-      alert("Devi fare login per caricare i turni dal cloud.");
-      return;
-    }
-    // TODO: implementare loadShiftsFromCloud
-    alert("Qui chiameremo Supabase per ricaricare i turni del mese.");
-  });
+  if (!currentUser) {
+    alert("Devi fare login per caricare i turni dal cloud.");
+    return;
+  }
+  await loadShiftsFromCloud();
+});
 
-  document.getElementById("saveMonthBtn").addEventListener("click", async () => {
-    if (!currentUser) {
-      alert("Devi fare login per salvare nel cloud.");
-      return;
-    }
-    // TODO: implementare saveShiftsToCloud
-    alert("Qui salveremo i turni del mese su Supabase (solo admin).");
-  });
+document.getElementById("saveMonthBtn").addEventListener("click", async () => {
+  await saveShiftsToCloud();
+});
 
-  document.getElementById("clearBtn").addEventListener("click", async () => {
-    if (!currentUser || currentUser.role !== "admin") {
-      alert("Solo l'admin può cancellare i turni.");
-      return;
-    }
-    if (!confirm("Vuoi cancellare tutti i turni di questo mese dal cloud?")) return;
-    // TODO: implementare deleteShiftsFromCloud
-    alert("Qui cancelleremo i turni del mese su Supabase.");
-  });
+document.getElementById("clearBtn").addEventListener("click", async () => {
+  if (!confirm("Vuoi cancellare tutti i turni di questo mese dal cloud?")) return;
+  await deleteShiftsFromCloudForMonth();
+});
+
 
   // === Navigation month ===
   document.getElementById("prevMonthBtn").addEventListener("click", () => {
     currentMonth--;
     if (currentMonth < 0) { currentMonth = 11; currentYear--; }
     buildCalendar(currentYear, currentMonth);
+    if (currentUser) {
+  loadShiftsFromCloud();
+}
+
   });
 
   document.getElementById("nextMonthBtn").addEventListener("click", () => {
     currentMonth++;
     if (currentMonth > 11) { currentMonth = 0; currentYear++; }
     buildCalendar(currentYear, currentMonth);
+    if (currentUser) {
+  loadShiftsFromCloud();
+}
+
   });
 
   document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
