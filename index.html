@@ -216,7 +216,6 @@
       color: #e5e7eb;
     }
 
-    /* Barra login / stato utente (sopra contratto) */
     .login-bar {
       background: #f9fafb;
       padding: 8px 20px;
@@ -314,6 +313,27 @@
     .contract-note {
       font-size: 12px;
       color: #6b7280;
+    }
+
+    .employee-select {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .employee-select select {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      font-size: 14px;
+      background: #f9fafb;
+      color: #111827;
+      outline: none;
+    }
+
+    .employee-select select:focus {
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 1px rgba(79,70,229,0.3);
     }
 
     .toolbar {
@@ -639,7 +659,7 @@
       margin-top: 4px;
       width: 100%;
       border-radius: 12px;
-      border: 1px dashed #c4b5fd;
+      border: 1 dashed #c4b5fd;
       background: #f5f3ff;
       padding: 6px 0;
       font-size: 13px;
@@ -691,10 +711,6 @@
 
       .app-container {
         border-radius: 12px;
-      }
-
-      .logo-strip img {
-        height: auto;
       }
 
       header {
@@ -780,6 +796,11 @@
         width: 100%;
         border-radius: 14px;
       }
+
+      .employee-select {
+        width: 100%;
+        justify-content: flex-start;
+      }
     }
 
     @media (max-width: 480px) {
@@ -797,7 +818,7 @@
 <div class="app-container">
 
   <div class="logo-strip">
-    <!-- qui puoi usare il logo locale del nuovo repo se vuoi -->
+    <!-- Assicurati di avere logo-petmark.png nel repo -->
     <img src="logo-petmark.png" alt="PetMark">
   </div>
 
@@ -834,7 +855,7 @@
     </div>
   </header>
 
-  <!-- Barra login / stato -->
+  <!-- Barra login -->
   <div class="login-bar">
     <div class="login-status">
       <span>Stato: <span class="who" id="loginStatus">Non autenticato</span></span>
@@ -849,6 +870,7 @@
     </div>
   </div>
 
+  <!-- Barra contratto + selezione dipendente -->
   <div class="contract-bar">
     <div class="contract-left">
       <span class="contract-label">Ore settimanali da contratto:</span>
@@ -859,11 +881,18 @@
         <option value="40">40 h/sett</option>
       </select>
     </div>
+
+    <div class="employee-select" id="employeeSelectWrapper" style="display:none;">
+      <span class="contract-label">Dipendente:</span>
+      <select id="employeeSelect"></select>
+    </div>
+
     <div class="contract-note">
       Sincronizzato con il profilo dipendente (cloud).
     </div>
   </div>
 
+  <!-- Toolbar -->
   <div class="toolbar">
     <button class="btn" id="refreshBtn">🔄 Ricarica dal cloud</button>
     <button class="btn primary" id="saveMonthBtn">💾 Salva mese nel cloud</button>
@@ -921,11 +950,12 @@
 </div>
 
 <script>
-  // === Supabase init ===
-  const SUPABASE_URL = "https://vuwvghwenhhuwrhrkmnr.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1d3ZnaHdlbmhodXdyaHJrbW5yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNjA1MTcsImV4cCI6MjA3OTgzNjUxN30.JuZ8uwPvPn0bDIVliczze6uoWyzD7k7wZVo3-63J6wY"; // chiave anon
+  // ========= SUPABASE INIT =========
+  const SUPABASE_URL = "https://vuwvghwenhhuwrhrkmnr.supabase.co";        // <-- METTI QUI IL TUO URL
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1d3ZnaHdlbmhodXdyaHJrbW5yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNjA1MTcsImV4cCI6MjA3OTgzNjUxN30.JuZ8uwPvPn0bDIVliczze6uoWyzD7k7wZVo3-63J6wY"; // <-- METTI QUI LA TUA ANON KEY
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+  // ========= VARIABILI BASE =========
   const monthNames = [
     "Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
     "Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"
@@ -940,146 +970,13 @@
   let currentMonthlyTotal = 0;
   let currentWeeksInMonth = 4;
 
-  // In memoria: shifts caricati dal cloud (per utente loggato)
   // { "YYYY-MM-DD": { colleague, shifts:[{start,end}] } }
   let shifts = {};
-  let currentUser = null; // { id, email, role, full_name, weekly_hours }
+  let currentUser = null;        // { id, email, role, full_name, weekly_hours, store }
+  let selectedUserId = null;     // utente di cui vediamo/modifichiamo i turni
+  let profilesCache = {};        // id -> profilo
 
-  async function loadShiftsFromCloud() {
-  if (!currentUser) return;
-
-  shifts = {}; // svuoto locale per questo mese
-
-  const first = new Date(currentYear, currentMonth, 1);
-  const last = new Date(currentYear, currentMonth + 1, 0);
-  const from = first.toISOString().slice(0, 10);
-  const to = last.toISOString().slice(0, 10);
-
-  const { data, error } = await supabase
-    .from("shifts")
-    .select("work_date, start_time, end_time, colleague")
-    .eq("user_id", currentUser.id)
-    .gte("work_date", from)
-    .lte("work_date", to)
-    .order("work_date", { ascending: true })
-    .order("start_time", { ascending: true });
-
-  if (error) {
-    console.error("Errore caricando turni:", error);
-    alert("Errore caricando i turni dal cloud.");
-    buildCalendar(currentYear, currentMonth);
-    return;
-  }
-
-  for (const row of data) {
-    const key = row.work_date; // formato 'YYYY-MM-DD'
-    if (!shifts[key]) {
-      shifts[key] = { colleague: row.colleague || "", shifts: [] };
-    }
-    shifts[key].shifts.push({
-      start: row.start_time.slice(0, 5),
-      end: row.end_time.slice(0, 5)
-    });
-  }
-
-  buildCalendar(currentYear, currentMonth);
-}
-
-async function saveShiftsToCloud() {
-  if (!currentUser || currentUser.role !== "admin") {
-    alert("Solo l'admin può salvare nel cloud.");
-    return;
-  }
-
-  const first = new Date(currentYear, currentMonth, 1);
-  const last = new Date(currentYear, currentMonth + 1, 0);
-  const from = first.toISOString().slice(0, 10);
-  const to = last.toISOString().slice(0, 10);
-
-  // 1) Cancella i turni esistenti nel mese
-  const { error: delErr } = await supabase
-    .from("shifts")
-    .delete()
-    .eq("user_id", currentUser.id)
-    .gte("work_date", from)
-    .lte("work_date", to);
-
-  if (delErr) {
-    console.error("Errore cancellando vecchi turni:", delErr);
-    alert("Errore cancellando i vecchi turni.");
-    return;
-  }
-
-  // 2) Inserisci i nuovi turni da 'shifts'
-  const rows = [];
-  for (const key of Object.keys(shifts)) {
-    const { year, month, day } = parseDateKey(key);
-    if (year !== currentYear || month !== currentMonth) continue;
-    const dayData = shifts[key];
-    for (const s of dayData.shifts) {
-      rows.push({
-        user_id: currentUser.id,
-        work_date: key,
-        start_time: s.start + ":00",
-        end_time: s.end + ":00",
-        colleague: dayData.colleague || null
-      });
-    }
-  }
-
-  if (rows.length === 0) {
-    alert("Nessun turno da salvare per questo mese.");
-    return;
-  }
-
-  const { error: insErr } = await supabase.from("shifts").insert(rows);
-  if (insErr) {
-    console.error("Errore inserendo turni:", insErr);
-    alert("Errore salvando i turni nel cloud.");
-    return;
-  }
-
-  alert("Turni del mese salvati correttamente nel cloud.");
-}
-
-async function deleteShiftsFromCloudForMonth() {
-  if (!currentUser || currentUser.role !== "admin") {
-    alert("Solo l'admin può cancellare i turni.");
-    return;
-  }
-
-  const first = new Date(currentYear, currentMonth, 1);
-  const last = new Date(currentYear, currentMonth + 1, 0);
-  const from = first.toISOString().slice(0, 10);
-  const to = last.toISOString().slice(0, 10);
-
-  const { error } = await supabase
-    .from("shifts")
-    .delete()
-    .eq("user_id", currentUser.id)
-    .gte("work_date", from)
-    .lte("work_date", to);
-
-  if (error) {
-    console.error("Errore cancellando turni:", error);
-    alert("Errore cancellando i turni dal cloud.");
-    return;
-  }
-
-  // Cancello anche lato frontend
-  for (const key of Object.keys(shifts)) {
-    const { year, month } = parseDateKey(key);
-    if (year === currentYear && month === currentMonth) {
-      delete shifts[key];
-    }
-  }
-  buildCalendar(currentYear, currentMonth);
-  alert("Turni del mese cancellati dal cloud.");
-}
-
-  
-
-  // === Utility ===
+  // ========= UTILITY =========
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
   function dateKey(year, month, day) { return year + "-" + pad(month+1) + "-" + pad(day); }
   function parseDateKey(key) { const [y,m,d] = key.split("-").map(Number); return {year:y, month:m-1, day:d}; }
@@ -1105,6 +1002,31 @@ async function deleteShiftsFromCloudForMonth() {
     return total;
   }
 
+  function getTargetUserId() {
+    if (currentUser?.role === "admin" && selectedUserId) {
+      return selectedUserId;
+    }
+    return currentUser?.id || null;
+  }
+
+  function getWeeklyHoursForTarget() {
+    const targetId = getTargetUserId();
+    if (!targetId) return null;
+    if (profilesCache[targetId]?.weekly_hours != null) {
+      return profilesCache[targetId].weekly_hours;
+    }
+    return currentUser?.weekly_hours || null;
+  }
+
+  function applyContractFromTarget() {
+    const contractSelect = document.getElementById("contractHoursSelect");
+    const weekly = getWeeklyHoursForTarget();
+    if (weekly) contractSelect.value = String(weekly);
+    else contractSelect.value = "";
+    updateExtraHours();
+  }
+
+  // ========= CALENDARIO =========
   function buildCalendar(year, month) {
     const tbody = document.getElementById("calendarBody");
     tbody.innerHTML = "";
@@ -1116,7 +1038,6 @@ async function deleteShiftsFromCloudForMonth() {
     const first = new Date(year, month, 1);
     const last = new Date(year, month+1, 0);
     const daysInMonth = last.getDate();
-
     let startWeekday = (first.getDay() + 6) % 7; // 0 lun
 
     let weekIndex = 0;
@@ -1171,7 +1092,6 @@ async function deleteShiftsFromCloudForMonth() {
       inner.appendChild(summary);
       td.appendChild(inner);
 
-      // click solo se admin (lo attiviamo dopo)
       td.addEventListener("click", () => {
         if (!currentUser || currentUser.role !== "admin") return;
         openModal(key);
@@ -1191,7 +1111,7 @@ async function deleteShiftsFromCloudForMonth() {
 
     row.appendChild(createWeekTotalCell(weekIndex));
     tbody.appendChild(row);
-    currentWeeksInMonth = weekIndex+1;
+    currentWeeksInMonth = weekIndex + 1;
 
     recomputeTotals(year, month);
   }
@@ -1272,7 +1192,7 @@ async function deleteShiftsFromCloudForMonth() {
     updateExtraHours();
   }
 
-  // === Modale ===
+  // ========= MODALE =========
   const modalBackdrop = document.getElementById("modalBackdrop");
   const modalTitle = document.getElementById("modalTitle");
   const colleagueInput = document.getElementById("colleagueInput");
@@ -1288,11 +1208,8 @@ async function deleteShiftsFromCloudForMonth() {
     shiftsList.innerHTML = "";
 
     const list = existing?.shifts || [];
-    if (list.length) {
-      list.forEach(s => addShiftRow(s.start, s.end));
-    } else {
-      addShiftRow("", "");
-    }
+    if (list.length) list.forEach(s => addShiftRow(s.start, s.end));
+    else addShiftRow("", "");
 
     modalBackdrop.classList.add("show");
   }
@@ -1366,11 +1283,10 @@ async function deleteShiftsFromCloudForMonth() {
     closeModal();
   }
 
-  // === Contract / Extra ===
+  // ========= EXTRA ORE =========
   function updateExtraHours() {
-    const select = document.getElementById("contractHoursSelect");
     const extraSpan = document.getElementById("monthlyExtra");
-    const weekly = currentUser?.weekly_hours || parseFloat(select.value || "0");
+    const weekly = getWeeklyHoursForTarget() || parseFloat(document.getElementById("contractHoursSelect").value || "0");
     let extra = 0;
     if (weekly > 0) {
       const monthlyContract = weekly * currentWeeksInMonth;
@@ -1380,7 +1296,7 @@ async function deleteShiftsFromCloudForMonth() {
     extraSpan.textContent = "Extra: " + extra.toFixed(1) + " h";
   }
 
-  // === Login UI ===
+  // ========= LOGIN UI =========
   const loginStatusEl = document.getElementById("loginStatus");
   const loginInfoEl = document.getElementById("loginInfo");
   const loginErrorEl = document.getElementById("loginError");
@@ -1390,95 +1306,266 @@ async function deleteShiftsFromCloudForMonth() {
   const logoutButton = document.getElementById("logoutButton");
   const userNameLabel = document.getElementById("userNameLabel");
   const userRoleLabel = document.getElementById("userRoleLabel");
+  const employeeSelectWrapper = document.getElementById("employeeSelectWrapper");
+  const employeeSelect = document.getElementById("employeeSelect");
 
-async function refreshSession() {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) {
-    console.error(error);
-  }
-  if (!data || !data.user) {
-    currentUser = null;
-    loginStatusEl.textContent = "Non autenticato";
-    loginInfoEl.textContent = "Accedi come admin o dipendente.";
-    loginErrorEl.textContent = "";
-    userNameLabel.textContent = "Utente";
-    userRoleLabel.textContent = "Non connesso";
-    logoutButton.style.display = "none";
-    document.getElementById("saveMonthBtn").disabled = true;
-    document.getElementById("clearBtn").disabled = true;
-    shifts = {};
-    buildCalendar(currentYear, currentMonth);
-    return;
-  }
+  async function refreshSession() {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) console.error(error);
 
-  const user = data.user;
-
-  // Leggo il profilo da Supabase
-  const { data: profile, error: pError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (pError) {
-    console.error("Errore caricando profilo:", pError);
-    loginErrorEl.textContent = "Errore profilo: " + pError.message;
-  }
-
-  // Se il profilo non esiste ancora, ne creo uno di default employee
-  let role = "employee";
-  let full_name = user.email;
-  let weekly_hours = null;
-
-  if (!profile) {
-    const { error: insertErr } = await supabase.from("profiles").insert({
-      id: user.id,
-      full_name: user.email,
-      role: "employee",
-      store: "Busto Arsizio 321",
-      weekly_hours: null
-    });
-    if (insertErr) {
-      console.error("Errore creando profilo:", insertErr);
+    if (!data || !data.user) {
+      currentUser = null;
+      selectedUserId = null;
+      profilesCache = {};
+      loginStatusEl.textContent = "Non autenticato";
+      loginInfoEl.textContent = "Accedi come admin o dipendente.";
+      loginErrorEl.textContent = "";
+      userNameLabel.textContent = "Utente";
+      userRoleLabel.textContent = "Non connesso";
+      logoutButton.style.display = "none";
+      document.getElementById("saveMonthBtn").disabled = true;
+      document.getElementById("clearBtn").disabled = true;
+      employeeSelectWrapper.style.display = "none";
+      shifts = {};
+      buildCalendar(currentYear, currentMonth);
+      return;
     }
-  } else {
-    role = profile.role || "employee";
-    full_name = profile.full_name || user.email;
-    weekly_hours = profile.weekly_hours;
+
+    const user = data.user;
+
+    const { data: profile, error: pError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (pError) {
+      console.error("Errore caricando profilo:", pError);
+      loginErrorEl.textContent = "Errore profilo: " + pError.message;
+    }
+
+    let role = "employee";
+    let full_name = user.email;
+    let weekly_hours = null;
+    let store = "Busto Arsizio 321";
+
+    if (!profile) {
+      const { error: insertErr } = await supabase.from("profiles").insert({
+        id: user.id,
+        full_name: user.email,
+        role: "employee",
+        store,
+        weekly_hours: null
+      });
+      if (insertErr) console.error("Errore creando profilo:", insertErr);
+    } else {
+      role = profile.role || "employee";
+      full_name = profile.full_name || user.email;
+      weekly_hours = profile.weekly_hours;
+      store = profile.store || store;
+    }
+
+    currentUser = { id: user.id, email: user.email, role, full_name, weekly_hours, store };
+
+    loginStatusEl.textContent = currentUser.email || "Connesso";
+    loginInfoEl.textContent = "Ruolo: " + currentUser.role;
+    userNameLabel.textContent = currentUser.full_name || "Utente";
+    userRoleLabel.textContent = currentUser.role === "admin" ? "Admin" : "Dipendente";
+    loginErrorEl.textContent = "";
+    logoutButton.style.display = "inline-flex";
+
+    document.getElementById("saveMonthBtn").disabled = currentUser.role !== "admin";
+    document.getElementById("clearBtn").disabled = currentUser.role !== "admin";
+
+    if (currentUser.role === "admin") {
+      const { data: profiles, error: profErr } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("full_name", { ascending: true });
+
+      if (profErr) {
+        console.error("Errore caricando lista dipendenti:", profErr);
+      } else {
+        profilesCache = {};
+        employeeSelect.innerHTML = "";
+        for (const p of profiles) {
+          profilesCache[p.id] = p;
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = p.full_name || p.id;
+          employeeSelect.appendChild(opt);
+        }
+        selectedUserId = currentUser.id;
+        employeeSelect.value = currentUser.id;
+        employeeSelectWrapper.style.display = "flex";
+      }
+    } else {
+      profilesCache = {};
+      profilesCache[currentUser.id] = {
+        id: currentUser.id,
+        full_name: currentUser.full_name,
+        weekly_hours: currentUser.weekly_hours
+      };
+      selectedUserId = currentUser.id;
+      employeeSelectWrapper.style.display = "none";
+    }
+
+    applyContractFromTarget();
+    await loadShiftsFromCloud();
   }
 
-  currentUser = {
-    id: user.id,
-    email: user.email,
-    role,
-    full_name,
-    weekly_hours
-  };
+  async function loadShiftsFromCloud() {
+    if (!currentUser) return;
+    const targetId = getTargetUserId();
+    if (!targetId) return;
 
-  loginStatusEl.textContent = currentUser.email || "Connesso";
-  loginInfoEl.textContent = "Ruolo: " + currentUser.role;
-  userNameLabel.textContent = currentUser.full_name || "Utente";
-  userRoleLabel.textContent =
-    currentUser.role === "admin" ? "Admin" : "Dipendente";
-  loginErrorEl.textContent = "";
+    shifts = {};
 
-  logoutButton.style.display = "inline-flex";
+    const first = new Date(currentYear, currentMonth, 1);
+    const last = new Date(currentYear, currentMonth + 1, 0);
+    const from = first.toISOString().slice(0, 10);
+    const to = last.toISOString().slice(0, 10);
 
-  // Abilita / disabilita bottoni in base al ruolo
-  document.getElementById("saveMonthBtn").disabled = currentUser.role !== "admin";
-  document.getElementById("clearBtn").disabled = currentUser.role !== "admin";
+    const { data, error } = await supabase
+      .from("shifts")
+      .select("work_date, start_time, end_time, colleague")
+      .eq("user_id", targetId)
+      .gte("work_date", from)
+      .lte("work_date", to)
+      .order("work_date", { ascending: true })
+      .order("start_time", { ascending: true });
 
-  // Imposta ore settimanali visuali se presenti
-  const contractSelect = document.getElementById("contractHoursSelect");
-  if (weekly_hours) {
-    contractSelect.value = String(weekly_hours);
+    if (error) {
+      console.error("Errore caricando turni:", error);
+      alert("Errore caricando i turni dal cloud.");
+      buildCalendar(currentYear, currentMonth);
+      return;
+    }
+
+    for (const row of data) {
+      const key = row.work_date;
+      if (!shifts[key]) {
+        shifts[key] = { colleague: row.colleague || "", shifts: [] };
+      }
+      shifts[key].shifts.push({
+        start: row.start_time.slice(0, 5),
+        end: row.end_time.slice(0, 5)
+      });
+    }
+
+    buildCalendar(currentYear, currentMonth);
   }
 
-  // Carica turni dal cloud per questo utente e mese
-  await loadShiftsFromCloud();
-}
+  async function saveShiftsToCloud() {
+    if (!currentUser || currentUser.role !== "admin") {
+      alert("Solo l'admin può salvare nel cloud.");
+      return;
+    }
 
+    const targetId = getTargetUserId();
+    if (!targetId) {
+      alert("Nessun dipendente selezionato.");
+      return;
+    }
 
+    const first = new Date(currentYear, currentMonth, 1);
+    const last = new Date(currentYear, currentMonth + 1, 0);
+    const from = first.toISOString().slice(0, 10);
+    const to = last.toISOString().slice(0, 10);
+
+    const { error: delErr } = await supabase
+      .from("shifts")
+      .delete()
+      .eq("user_id", targetId)
+      .gte("work_date", from)
+      .lte("work_date", to);
+
+    if (delErr) {
+      console.error("Errore cancellando vecchi turni:", delErr);
+      alert("Errore cancellando i vecchi turni.");
+      return;
+    }
+
+    const rows = [];
+    for (const key of Object.keys(shifts)) {
+      const { year, month } = parseDateKey(key);
+      if (year !== currentYear || month !== currentMonth) continue;
+      const dayData = shifts[key];
+      for (const s of dayData.shifts) {
+        rows.push({
+          user_id: targetId,
+          work_date: key,
+          start_time: s.start + ":00",
+          end_time: s.end + ":00",
+          colleague: dayData.colleague || null
+        });
+      }
+    }
+
+    if (rows.length === 0) {
+      alert("Nessun turno da salvare per questo mese.");
+      return;
+    }
+
+    const { error: insErr } = await supabase.from("shifts").insert(rows);
+    if (insErr) {
+      console.error("Errore inserendo turni:", insErr);
+      alert("Errore salvando i turni nel cloud.");
+      return;
+    }
+
+    alert("Turni del mese salvati correttamente nel cloud.");
+  }
+
+  async function deleteShiftsFromCloudForMonth() {
+    if (!currentUser || currentUser.role !== "admin") {
+      alert("Solo l'admin può cancellare i turni.");
+      return;
+    }
+
+    const targetId = getTargetUserId();
+    if (!targetId) {
+      alert("Nessun dipendente selezionato.");
+      return;
+    }
+
+    const first = new Date(currentYear, currentMonth, 1);
+    const last = new Date(currentYear, currentMonth + 1, 0);
+    const from = first.toISOString().slice(0, 10);
+    const to = last.toISOString().slice(0, 10);
+
+    const { error } = await supabase
+      .from("shifts")
+      .delete()
+      .eq("user_id", targetId)
+      .gte("work_date", from)
+      .lte("work_date", to);
+
+    if (error) {
+      console.error("Errore cancellando turni:", error);
+      alert("Errore cancellando i turni dal cloud.");
+      return;
+    }
+
+    for (const key of Object.keys(shifts)) {
+      const { year, month } = parseDateKey(key);
+      if (year === currentYear && month === currentMonth) {
+        delete shifts[key];
+      }
+    }
+    buildCalendar(currentYear, currentMonth);
+    alert("Turni del mese cancellati dal cloud.");
+  }
+
+  function onEmployeeChanged() {
+    selectedUserId = employeeSelect.value || null;
+    applyContractFromTarget();
+    loadShiftsFromCloud();
+  }
+
+  employeeSelect.addEventListener("change", onEmployeeChanged);
+
+  // ========= LOGIN BUTTONS =========
   loginButton.addEventListener("click", async () => {
     loginErrorEl.textContent = "";
     const email = loginEmailEl.value.trim();
@@ -1493,25 +1580,28 @@ async function refreshSession() {
       return;
     }
     loginPasswordEl.value = "";
-    logoutButton.style.display = "inline-flex";
     await refreshSession();
   });
 
   logoutButton.addEventListener("click", async () => {
     await supabase.auth.signOut();
     currentUser = null;
+    selectedUserId = null;
+    profilesCache = {};
     loginStatusEl.textContent = "Non autenticato";
     loginInfoEl.textContent = "Accedi come admin o dipendente.";
     userNameLabel.textContent = "Utente";
     userRoleLabel.textContent = "Non connesso";
+    loginErrorEl.textContent = "";
     logoutButton.style.display = "none";
     document.getElementById("saveMonthBtn").disabled = true;
     document.getElementById("clearBtn").disabled = true;
+    employeeSelectWrapper.style.display = "none";
     shifts = {};
     buildCalendar(currentYear, currentMonth);
   });
 
-  // === Avatar locale (non cloud per ora) ===
+  // ========= AVATAR LOCALE =========
   const AVATAR_KEY = "petmark_cloud_avatar_v1";
   const userCard = document.getElementById("userCard");
   const avatarInput = document.getElementById("avatarFileInput");
@@ -1544,45 +1634,40 @@ async function refreshSession() {
     reader.readAsDataURL(file);
   });
 
+  // ========= TOOLBAR =========
   document.getElementById("refreshBtn").addEventListener("click", async () => {
-  if (!currentUser) {
-    alert("Devi fare login per caricare i turni dal cloud.");
-    return;
-  }
-  await loadShiftsFromCloud();
-});
+    if (!currentUser) {
+      alert("Devi fare login per caricare i turni dal cloud.");
+      return;
+    }
+    await loadShiftsFromCloud();
+  });
 
-document.getElementById("saveMonthBtn").addEventListener("click", async () => {
-  await saveShiftsToCloud();
-});
+  document.getElementById("saveMonthBtn").addEventListener("click", async () => {
+    await saveShiftsToCloud();
+  });
 
-document.getElementById("clearBtn").addEventListener("click", async () => {
-  if (!confirm("Vuoi cancellare tutti i turni di questo mese dal cloud?")) return;
-  await deleteShiftsFromCloudForMonth();
-});
+  document.getElementById("clearBtn").addEventListener("click", async () => {
+    if (!confirm("Vuoi cancellare tutti i turni di questo mese dal cloud?")) return;
+    await deleteShiftsFromCloudForMonth();
+  });
 
-
-  // === Navigation month ===
+  // ========= NAV MESE =========
   document.getElementById("prevMonthBtn").addEventListener("click", () => {
     currentMonth--;
     if (currentMonth < 0) { currentMonth = 11; currentYear--; }
     buildCalendar(currentYear, currentMonth);
-    if (currentUser) {
-  loadShiftsFromCloud();
-}
-
+    if (currentUser) loadShiftsFromCloud();
   });
 
   document.getElementById("nextMonthBtn").addEventListener("click", () => {
     currentMonth++;
     if (currentMonth > 11) { currentMonth = 0; currentYear++; }
     buildCalendar(currentYear, currentMonth);
-    if (currentUser) {
-  loadShiftsFromCloud();
-}
-
+    if (currentUser) loadShiftsFromCloud();
   });
 
+  // ========= MODAL EVENTI =========
   document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
   document.getElementById("cancelModalBtn").addEventListener("click", closeModal);
   modalBackdrop.addEventListener("click", (e) => {
@@ -1591,11 +1676,11 @@ document.getElementById("clearBtn").addEventListener("click", async () => {
   document.getElementById("addShiftBtn").addEventListener("click", () => addShiftRow());
   document.getElementById("saveModalBtn").addEventListener("click", saveModal);
 
-  // === Init ===
+  // ========= INIT =========
   (async function init() {
     loadAvatar();
     buildCalendar(currentYear, currentMonth);
-    await refreshSession();  // se l'utente era già loggato, lo ripristiniamo
+    await refreshSession();
   })();
 </script>
 </body>
