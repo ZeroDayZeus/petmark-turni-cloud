@@ -1223,7 +1223,6 @@
 
   function openModal(dateKeyStr) {
     editingDate = dateKeyStr;
-    // dipendente selezionato nel dropdown modale (solo admin)
     if (currentUser && currentUser.role === "admin") {
       const targetId = getTargetUserId();
       if (targetId) modalEmployeeSelect.value = targetId;
@@ -1279,7 +1278,8 @@
     shiftsList.appendChild(row);
   }
 
-  function saveModal() {
+  // <-- MODIFICATA: ora async e salva subito nel cloud se admin
+  async function saveModal() {
     if (!editingDate) return;
     const coll = colleagueInput.value.trim();
     const rows = shiftsList.querySelectorAll(".shift-row");
@@ -1297,7 +1297,15 @@
     } else {
       shifts[editingDate] = { colleague: coll, shifts: newShifts };
     }
+
+    // ricalcola ore in UI
     recomputeTotals(currentYear, currentMonth);
+
+    // se sono admin, salvo subito il mese nel cloud per il dipendente selezionato
+    if (currentUser && currentUser.role === "admin") {
+      await saveShiftsToCloud();
+    }
+
     closeModal();
   }
 
@@ -1733,7 +1741,7 @@
     if (e.target === modalBackdrop) closeModal();
   });
   document.getElementById("addShiftBtn").addEventListener("click", () => addShiftRow());
-  document.getElementById("saveModalBtn").addEventListener("click", saveModal);
+  document.getElementById("saveModalBtn").addEventListener("click", () => { saveModal(); });
 
   // ========= INIT =========
   (async function init() {
