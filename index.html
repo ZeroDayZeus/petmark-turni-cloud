@@ -952,7 +952,7 @@
 <script>
   // ========= SUPABASE INIT =========
   const SUPABASE_URL = "https://vuwvghwenhhuwrhrkmnr.supabase.co";        // <-- METTI QUI IL TUO URL
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1d3ZnaHdlbmhodXdyaHJrbW5yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNjA1MTcsImV4cCI6MjA3OTgzNjUxN30.JuZ8uwPvPn0bDIVliczze6uoWyzD7k7wZVo3-63J6wY"; // <-- METTI QUI LA TUA ANON KEY
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1d3ZnaHdlbmhodXdyaHJrbW5yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNjA1MTcsImV4cCI6MjA3OTgzNjUxN30.JuZ8uwPvPn0bDIVliczze6uoWyzD7k7WZVo3-63J6wY"; // <-- METTI QUI LA TUA ANON KEY
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // ========= VARIABILI BASE =========
@@ -1054,6 +1054,7 @@
     for (let day=1; day<=daysInMonth; day++) {
       if (cellsFilled === 7) {
         row.appendChild(createWeekTotalCell(weekIndex));
+        const tbody = document.getElementById("calendarBody");
         tbody.appendChild(row);
         row = document.createElement("tr");
         cellsFilled = 0;
@@ -1313,6 +1314,7 @@
     const { data, error } = await supabase.auth.getUser();
     if (error) console.error(error);
 
+    // NON AUTENTICATO
     if (!data || !data.user) {
       currentUser = null;
       selectedUserId = null;
@@ -1322,7 +1324,13 @@
       loginErrorEl.textContent = "";
       userNameLabel.textContent = "Utente";
       userRoleLabel.textContent = "Non connesso";
+
+      // Mostra login, nascondi logout
+      loginEmailEl.style.display = "inline-block";
+      loginPasswordEl.style.display = "inline-block";
+      loginButton.style.display = "inline-flex";
       logoutButton.style.display = "none";
+
       document.getElementById("saveMonthBtn").disabled = true;
       document.getElementById("clearBtn").disabled = true;
       employeeSelectWrapper.style.display = "none";
@@ -1372,6 +1380,11 @@
     userNameLabel.textContent = currentUser.full_name || "Utente";
     userRoleLabel.textContent = currentUser.role === "admin" ? "Admin" : "Dipendente";
     loginErrorEl.textContent = "";
+
+    // NASCONDI login, MOSTRA logout
+    loginEmailEl.style.display = "none";
+    loginPasswordEl.style.display = "none";
+    loginButton.style.display = "none";
     logoutButton.style.display = "inline-flex";
 
     document.getElementById("saveMonthBtn").disabled = currentUser.role !== "admin";
@@ -1593,7 +1606,13 @@
     userNameLabel.textContent = "Utente";
     userRoleLabel.textContent = "Non connesso";
     loginErrorEl.textContent = "";
+
+    // Mostra login, nascondi logout
+    loginEmailEl.style.display = "inline-block";
+    loginPasswordEl.style.display = "inline-block";
+    loginButton.style.display = "inline-flex";
     logoutButton.style.display = "none";
+
     document.getElementById("saveMonthBtn").disabled = true;
     document.getElementById("clearBtn").disabled = true;
     employeeSelectWrapper.style.display = "none";
