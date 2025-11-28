@@ -606,7 +606,8 @@
     }
 
     .modal input[type="text"],
-    .modal input[type="time"] {
+    .modal input[type="time"],
+    .modal select {
       width: 100%;
       padding: 6px 8px;
       border-radius: 10px;
@@ -617,7 +618,8 @@
     }
 
     .modal input[type="text"]:focus,
-    .modal input[type="time"]:focus {
+    .modal input[type="time"]:focus,
+    .modal select:focus {
       border-color: #4f46e5;
       box-shadow: 0 0 0 1px rgba(79,70,229,0.3);
     }
@@ -818,7 +820,6 @@
 <div class="app-container">
 
   <div class="logo-strip">
-    <!-- Assicurati di avere logo-petmark.png nel repo -->
     <img src="logo-petmark.png" alt="PetMark">
   </div>
 
@@ -928,6 +929,12 @@
       <button class="modal-close" id="modalCloseBtn">&times;</button>
     </div>
 
+    <!-- Selezione dipendente (solo admin) -->
+    <div class="modal-section" id="modalEmployeeSection" style="display:none;">
+      <div class="modal-section-label"><span class="icon">👥</span> Dipendente</div>
+      <select id="modalEmployeeSelect"></select>
+    </div>
+
     <div class="modal-section">
       <div class="modal-section-label"><span class="icon">👤</span> Collega</div>
       <input type="text" id="colleagueInput" placeholder="Nome collega (opzionale)" />
@@ -951,8 +958,8 @@
 
 <script>
   // ========= SUPABASE INIT =========
-  const SUPABASE_URL = "https://vuwvghwenhhuwrhrkmnr.supabase.co";        // <-- METTI QUI IL TUO URL
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1d3ZnaHdlbmhodXdyaHJrbW5yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNjA1MTcsImV4cCI6MjA3OTgzNjUxN30.JuZ8uwPvPn0bDIVliczze6uoWyzD7k7wZVo3-63J6wY"; // <-- METTI QUI LA TUA ANON KEY
+  const SUPABASE_URL = "https://vuwvghwenhhuwrhrkmnr.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1d3ZnaHdlbmhodXdyaHJrbW5yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNjA1MTcsImV4cCI6MjA3OTgzNjUxN30.JuZ8uwPvPn0bDIVliczze6uoWyzD7k7wZVo3-63J6wY";
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // ========= VARIABILI BASE =========
@@ -1054,7 +1061,6 @@
     for (let day=1; day<=daysInMonth; day++) {
       if (cellsFilled === 7) {
         row.appendChild(createWeekTotalCell(weekIndex));
-        const tbody = document.getElementById("calendarBody");
         tbody.appendChild(row);
         row = document.createElement("tr");
         cellsFilled = 0;
@@ -1198,20 +1204,31 @@
   const modalTitle = document.getElementById("modalTitle");
   const colleagueInput = document.getElementById("colleagueInput");
   const shiftsList = document.getElementById("shiftsList");
+  const modalEmployeeSection = document.getElementById("modalEmployeeSection");
+  const modalEmployeeSelect = document.getElementById("modalEmployeeSelect");
 
-  function openModal(dateKeyStr) {
-    editingDate = dateKeyStr;
-    const {month, day} = parseDateKey(dateKeyStr);
+  function populateModalFields() {
+    if (!editingDate) return;
+    const {month, day} = parseDateKey(editingDate);
     modalTitle.textContent = day + " " + monthNames[month];
 
-    const existing = shifts[dateKeyStr];
+    const existing = shifts[editingDate];
     colleagueInput.value = existing?.colleague || "";
     shiftsList.innerHTML = "";
 
     const list = existing?.shifts || [];
     if (list.length) list.forEach(s => addShiftRow(s.start, s.end));
     else addShiftRow("", "");
+  }
 
+  function openModal(dateKeyStr) {
+    editingDate = dateKeyStr;
+    // dipendente selezionato nel dropdown modale (solo admin)
+    if (currentUser && currentUser.role === "admin") {
+      const targetId = getTargetUserId();
+      if (targetId) modalEmployeeSelect.value = targetId;
+    }
+    populateModalFields();
     modalBackdrop.classList.add("show");
   }
 
@@ -1334,6 +1351,7 @@
       document.getElementById("saveMonthBtn").disabled = true;
       document.getElementById("clearBtn").disabled = true;
       employeeSelectWrapper.style.display = "none";
+      modalEmployeeSection.style.display = "none";
       shifts = {};
       buildCalendar(currentYear, currentMonth);
       return;
@@ -1401,16 +1419,26 @@
       } else {
         profilesCache = {};
         employeeSelect.innerHTML = "";
+        modalEmployeeSelect.innerHTML = "";
+
         for (const p of profiles) {
           profilesCache[p.id] = p;
+
           const opt = document.createElement("option");
           opt.value = p.id;
           opt.textContent = p.full_name || p.id;
           employeeSelect.appendChild(opt);
+
+          const opt2 = document.createElement("option");
+          opt2.value = p.id;
+          opt2.textContent = p.full_name || p.id;
+          modalEmployeeSelect.appendChild(opt2);
         }
         selectedUserId = currentUser.id;
         employeeSelect.value = currentUser.id;
+        modalEmployeeSelect.value = currentUser.id;
         employeeSelectWrapper.style.display = "flex";
+        modalEmployeeSection.style.display = "block";
       }
     } else {
       profilesCache = {};
@@ -1421,6 +1449,7 @@
       };
       selectedUserId = currentUser.id;
       employeeSelectWrapper.style.display = "none";
+      modalEmployeeSection.style.display = "none";
     }
 
     applyContractFromTarget();
@@ -1578,6 +1607,16 @@
 
   employeeSelect.addEventListener("change", onEmployeeChanged);
 
+  // Cambiare dipendente direttamente dal modale
+  modalEmployeeSelect.addEventListener("change", async () => {
+    if (!currentUser || currentUser.role !== "admin") return;
+    selectedUserId = modalEmployeeSelect.value || null;
+    if (employeeSelect) employeeSelect.value = selectedUserId || "";
+    applyContractFromTarget();
+    await loadShiftsFromCloud();
+    if (editingDate) populateModalFields();
+  });
+
   // ========= LOGIN BUTTONS =========
   loginButton.addEventListener("click", async () => {
     loginErrorEl.textContent = "";
@@ -1616,6 +1655,7 @@
     document.getElementById("saveMonthBtn").disabled = true;
     document.getElementById("clearBtn").disabled = true;
     employeeSelectWrapper.style.display = "none";
+    modalEmployeeSection.style.display = "none";
     shifts = {};
     buildCalendar(currentYear, currentMonth);
   });
